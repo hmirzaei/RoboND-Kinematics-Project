@@ -185,47 +185,53 @@ To calculate the first three joint angles, the coordinates for link2 and link3 o
 
 First, the coordinates of wrist center (WC) should be calculated. This can be done using the following equation:
 
-<img src="https://latex.codecogs.com/gif.latex?\large \phantom{ }^B r_{WC/B_o} = \phantom{ }^B r_{G_o/B_o} - d_G . \phantom{ }^G_B R[:,3]"/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Cphantom%7B%20%7D%5EB%20r_%7BWC%2FB_o%7D%20%3D%20%5Cphantom%7B%20%7D%5EB%20r_%7BG_o%2FB_o%7D%20-%20d_G%20.%20%5Cphantom%7B%20%7D%5EG_B%20R%5B%3A%2C3%5D%20)
 
 That is, we should move back from the gripper location in the direction of third column of the rotation matrix from the base to gripper frame and with the length of d<sub>G</sub>. d<sub>G</sub> is distance of wrist center to the end-effector which can be found in the urdf file (second table in the previous section). We can rewrite the above equation in a more readable form of:
 
-<img src="https://latex.codecogs.com/gif.latex?\large  wc_x = P_x - d_G . n_x"/> 
-<img src="https://latex.codecogs.com/gif.latex?\large  wc_y = P_y - d_G . n_y"/> 
-<img src="https://latex.codecogs.com/gif.latex?\large  wc_z = P_z - d_G . n_z"/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%20wc_x%20%3D%20P_x%20-%20d_G%20.%20n_x%20)
+
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%20wc_y%20%3D%20P_y%20-%20d_G%20.%20n_y%20)
+
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%20wc_z%20%3D%20P_z%20-%20d_G%20.%20n_z%20)
 
 where wc<sub>[x/y/z]</sub> are the coordinates of wrist center, P<sub>[x/y/z]</sub> are the coordinates of the gripper position (input to the IK problem) and n<sub>[x/y/z]</sub> are the elements of rotation matrix in the third column. Rotation matrix can be found by converting gripper pos quaternions (another input to the IK problem) to the matrix format.
 
 Using WC coordinates, θ<sub>1</sub> can be calculated as
 
-<img src="https://latex.codecogs.com/gif.latex?\large \theta_1 = \arctan2(wc_y, wc_x)"/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Ctheta_1%20%3D%20%5Carctan2%28wc_y%2C%20wc_x%29%20)
 
 From the above diagram, θ<sub>2</sub> and θ<sub>3</sub> can be found by the following equations:
 
-<img src="https://latex.codecogs.com/gif.latex?\large \theta_2 = \pi - a - \gamma - \pi/2"/> 
-<img src="https://latex.codecogs.com/gif.latex?\large \theta_3 = \pi - b - \omega - \pi/2"/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Ctheta_2%20%3D%20%5Cpi%20-%20a%20-%20%5Cgamma%20-%20%5Cpi%2F2%20)
+
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Ctheta_3%20%3D%20%5Cpi%20-%20b%20-%20%5Comega%20-%20%5Cpi%2F2%20)
 
 γ is calculated using the projected coordinates of the wrist center and link2's origin:
 
-<img src="https://latex.codecogs.com/gif.latex?\large \gamma = \arctan2(wc_{y'} - O_2_{y'}, wc_{x'} - O_2_{x'})"/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Cgamma%20%3D%20%5Carctan2%28wc_%7By%27%7D%20-%20O_2_%7By%27%7D%2C%20wc_%7Bx%27%7D%20-%20O_2_%7Bx%27%7D%29%20)
 
 ω is a fixed angle and can be calculated using the robot's urdf data and following equation:
 
-<img src="https://latex.codecogs.com/gif.latex?\large \omega = \arctan2(-a_3, d_4)"/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Comega%20%3D%20%5Carctan2%28-a_3%2C%20d_4%29%20)
 
 angles a and b are calculated using law of cosines:
 
-<img src="https://latex.codecogs.com/gif.latex?\large a = \arccos \frac{A^2-B^2-C^2}{2B.C}"/> 
-<img src="https://latex.codecogs.com/gif.latex?\large b = \arccos \frac{B^2-A^2-C^2}{2A.C}"/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20a%20%3D%20%5Carccos%20%5Cfrac%7BA%5E2-B%5E2-C%5E2%7D%7B2B.C%7D%20)
+
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20b%20%3D%20%5Carccos%20%5Cfrac%7BB%5E2-A%5E2-C%5E2%7D%7B2A.C%7D%20)
 
 Using  θ<sub>1</sub>, θ<sub>2</sub> and θ<sub>3</sub>, we can find the rotation matrix from base to link3 and calculate the rotation matrix from link3 to the gripper using following equation:
 
-<img src="https://latex.codecogs.com/gif.latex?\large \phantom{ }^G_3 R = \text{inv}\{{\phantom{ }^3_B R}\} \phantom{ }^G_B R = \phantom{ }^3_B R^T \phantom{ }^G_B R "/> 
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Cphantom%7B%20%7D%5EG_3%20R%20%3D%20%5Ctext%7Binv%7D%5C%7B%7B%5Cphantom%7B%20%7D%5E3_B%20R%7D%5C%7D%20%5Cphantom%7B%20%7D%5EG_B%20R%20%3D%20%5Cphantom%7B%20%7D%5E3_B%20R%5ET%20%5Cphantom%7B%20%7D%5EG_B%20R%20%20)
 
 Finally, θ<sub>4</sub>, θ<sub>5</sub> and  θ<sub>6</sub> are calculated as:
 
-<img src="https://latex.codecogs.com/gif.latex?\large \theta_4 = \arctan2(\phantom{ }^G_3 R[2, 1], -\phantom{ }^G_3 R[3, 1])"/>
-<img src="https://latex.codecogs.com/gif.latex?\large \theta_5 = \arctan2(\sqrt{\phantom{ }^G_3 R[2, 1]^ 2 + \phantom{ }^G_3 R[3, 1] ^ 2}, \phantom{ }^G_3 R[1, 1])"/>
-<img src="https://latex.codecogs.com/gif.latex?\large \theta_6 = \arctan2(\phantom{ }^G_3 R[1, 2], \phantom{ }^G_3 R[1, 3])"/>
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Ctheta_4%20%3D%20%5Carctan2%28%5Cphantom%7B%20%7D%5EG_3%20R%5B2%2C%201%5D%2C%20-%5Cphantom%7B%20%7D%5EG_3%20R%5B3%2C%201%5D%29)
+
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Ctheta_5%20%3D%20%5Carctan2%28%5Csqrt%7B%5Cphantom%7B%20%7D%5EG_3%20R%5B2%2C%201%5D%5E%202%20%2B%20%5Cphantom%7B%20%7D%5EG_3%20R%5B3%2C%201%5D%20%5E%202%7D%2C%20%5Cphantom%7B%20%7D%5EG_3%20R%5B1%2C%201%5D%29)
+
+![equation](https://latex.codecogs.com/gif.latex?%5Clarge%20%5Ctheta_6%20%3D%20%5Carctan2%28%5Cphantom%7B%20%7D%5EG_3%20R%5B1%2C%202%5D%2C%20%5Cphantom%7B%20%7D%5EG_3%20R%5B1%2C%203%5D%29)
 
 
 ### Project Implementation
