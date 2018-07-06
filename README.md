@@ -1,101 +1,240 @@
+[//]: # (Image References)
+[image_0]: ./misc/rover_image.jpg
 [![Udacity - Robotics NanoDegree Program](https://s3-us-west-1.amazonaws.com/udacity-robotics/Extra+Images/RoboND_flag.png)](https://www.udacity.com/robotics)
-# Robotic arm - Pick & Place project
+# Project: Kinematics Pick & Place
 
-Make sure you are using robo-nd VM or have Ubuntu+ROS installed locally.
+### Simulation Output
+[run_gif]: ./output/run.gif
+![run_gif][run_gif]
 
-### One time Gazebo setup step:
-Check the version of gazebo installed on your system using a terminal:
-```sh
-$ gazebo --version
-```
-To run projects from this repository you need version 7.7.0+
-If your gazebo version is not 7.7.0+, perform the update as follows:
-```sh
-$ sudo sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
-$ wget http://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
-$ sudo apt-get update
-$ sudo apt-get install gazebo7
-```
+### Kinematic Analysis
+#### DH Reference Frame Diagram
+[dh]: ./misc/dh.png
+![dh][dh]
 
-Once again check if the correct version was installed:
-```sh
-$ gazebo --version
-```
-### For the rest of this setup, catkin_ws is the name of active ROS Workspace, if your workspace name is different, change the commands accordingly
+Denavit–Hartenberg reference frames for KUKA robot arm is shown in above diagram. The following pictures show the actual joints and their reference frames defined in RViz environment
 
-If you do not have an active ROS workspace, you can create one by:
-```sh
-$ mkdir -p ~/catkin_ws/src
-$ cd ~/catkin_ws/
-$ catkin_make
-```
+[l1-3]: ./misc/l1-3.png
+[l4-6]: ./misc/l4-6.png
 
-Now that you have a workspace, clone or download this repo into the **src** directory of your workspace:
-```sh
-$ cd ~/catkin_ws/src
-$ git clone https://github.com/udacity/RoboND-Kinematics-Project.git
-```
+| ![l1-3][l1-3] | ![l4-6][l4-6] |
+|:-------------:|:-------------:|
+| joints 1 to 3 | joints 4 - 6 |
 
-Now from a terminal window:
+Using above diagrams we can derive DH parameter table as following:
 
-```sh
-$ cd ~/catkin_ws
-$ rosdep install --from-paths src --ignore-src --rosdistro=kinetic -y
-$ cd ~/catkin_ws/src/RoboND-Kinematics-Project/kuka_arm/scripts
-$ sudo chmod +x target_spawn.py
-$ sudo chmod +x IK_server.py
-$ sudo chmod +x safe_spawner.sh
-```
-Build the project:
-```sh
-$ cd ~/catkin_ws
-$ catkin_make
-```
+i   | α<sub>i-1</sub> | a<sub>i-1</sub>      | d<sub>i-1</sub>    | θ<sub>i</sub>
+:---|:----------------|:---------------------|:-------------------|:---------------
+1   | 0               | 0                    | d<sub>1</sub>=0.75 | θ<sub>1</sub>
+2   | - π/2           | a<sub>1</sub>=0.35   | 0                  | θ<sub>2</sub> - π/2
+3   | 0               | a<sub>2</sub>=1.25   | 0                  | θ<sub>3</sub>
+4   | - π/2           | a<sub>3</sub>=-0.054 | d<sub>4</sub>=1.5  | θ<sub>4</sub>
+5   | π/2             | 0                    | 0                  | θ<sub>5</sub> 
+6   | - π/2           | 0                    | 0                  | θ<sub>6</sub>
+G*  | 0               | 0                    | d<sub>G</sub>=0.303| 0
 
-Add following to your .bashrc file
-```
-export GAZEBO_MODEL_PATH=~/catkin_ws/src/RoboND-Kinematics-Project/kuka_arm/models
+\*  gripper 
 
-source ~/catkin_ws/devel/setup.bash
+To find the actual values for the link lengths and link offsets, we can refer to `kr210.urdf.xacro` located in urdf directory. The following table summarizes the entries in this file:
+
+[dh_vals]: ./misc/dh_vals.png
+![dh_vals][dh_vals]
+
+#### Forward kinematics
+
+Using `sympy` python package we can derive forward kinematic equations. The instructions provided in the lectures are followed to develop the python codes.
+
+First, we should import the required functions and packages:
+```python
+import numpy as np
+from numpy import array
+from sympy import symbols, cos, sin, pi, simplify, sqrt, atan2
+from sympy.matrices import Matrix
+import math
 ```
 
-For demo mode make sure the **demo** flag is set to _"true"_ in `inverse_kinematics.launch` file under /RoboND-Kinematics-Project/kuka_arm/launch
-
-In addition, you can also control the spawn location of the target object in the shelf. To do this, modify the **spawn_location** argument in `target_description.launch` file under /RoboND-Kinematics-Project/kuka_arm/launch. 0-9 are valid values for spawn_location with 0 being random mode.
-
-You can launch the project by
-```sh
-$ cd ~/catkin_ws/src/RoboND-Kinematics-Project/kuka_arm/scripts
-$ ./safe_spawner.sh
+Next, the symbolic variables are defined for joint angles and DH parameters:
+```python
+### symbols of joint variables
+q1, q2, q3, q4, q5, q6, q7 = symbols('q1:8') #theta_i
+d1, d2, d3, d4, d5, d6, d7 = symbols('d1:8')
+a0, a1, a2, a3, a4, a5, a6 = symbols('a0:7')
+alpha0, alpha1, alpha2, alpha3, alpha4, alpha5, alpha6 = symbols('alpha0:7')
 ```
 
-If you are running in demo mode, this is all you need. To run your own Inverse Kinematics code change the **demo** flag described above to _"false"_ and run your code (once the project has successfully loaded) by:
-```sh
-$ cd ~/catkin_ws/src/RoboND-Kinematics-Project/kuka_arm/scripts
-$ rosrun kuka_arm IK_server.py
+DH parameters are populated using the DH table described before:
+```python
+# DH Parameters
+s = {alpha0:     0, a0:      0, d1:  0.75,
+     alpha1: -pi/2, a1:   0.35, d2:     0,   q2: q2 - pi/2,
+     alpha2:     0, a2:   1.25, d3:     0,
+     alpha3: -pi/2, a3: -0.054, d4:  1.50,
+     alpha4:  pi/2, a4:      0, d5:     0,
+     alpha5: -pi/2, a5:      0, d6:     0,
+     alpha6:     0, a6:      0, d7: 0.303,   q7: 0}
 ```
-Once Gazebo and rviz are up and running, make sure you see following in the gazebo world:
+Next, the transformation matrices from each link to the subsequent link are calculated:
+```python
+#### Homogeneous Transforms
+# base_link to link1
+T0_1 = Matrix([[             cos(q1),            -sin(q1),            0,              a0],
+               [ sin(q1)*cos(alpha0), cos(q1)*cos(alpha0), -sin(alpha0), -sin(alpha0)*d1],
+               [ sin(q1)*sin(alpha0), cos(q1)*sin(alpha0),  cos(alpha0),  cos(alpha0)*d1],
+               [                   0,                   0,            0,               1]])
+T0_1 = T0_1.subs(s)
 
-	- Robot
-	
-	- Shelf
-	
-	- Blue cylindrical target in one of the shelves
-	
-	- Dropbox right next to the robot
-	
+# link1 to link2
+T1_2 = Matrix([[             cos(q2),            -sin(q2),            0,              a1],
+               [ sin(q2)*cos(alpha1), cos(q2)*cos(alpha1), -sin(alpha1), -sin(alpha1)*d2],
+               [ sin(q2)*sin(alpha1), cos(q2)*sin(alpha1),  cos(alpha1),  cos(alpha1)*d2],
+               [                   0,                   0,            0,               1]])
+T1_2 = T1_2.subs(s)
 
-If any of these items are missing, report as an issue.
+#...
 
-Once all these items are confirmed, open rviz window, hit Next button.
+T5_6 = Matrix([[             cos(q6),            -sin(q6),            0,              a5],
+               [ sin(q6)*cos(alpha5), cos(q6)*cos(alpha5), -sin(alpha5), -sin(alpha5)*d6],
+               [ sin(q6)*sin(alpha5), cos(q6)*sin(alpha5),  cos(alpha5),  cos(alpha5)*d6],
+               [                   0,                   0,            0,               1]])
+T5_6 = T5_6.subs(s)
 
-To view the complete demo keep hitting Next after previous action is completed successfully. 
+# link6 to gripper
+T6_G = Matrix([[             cos(q7),            -sin(q7),            0,              a6],
+               [ sin(q7)*cos(alpha6), cos(q7)*cos(alpha6), -sin(alpha6), -sin(alpha6)*d7],
+               [ sin(q7)*sin(alpha6), cos(q7)*sin(alpha6),  cos(alpha6),  cos(alpha6)*d7],
+               [                   0,                   0,            0,               1]])
+T6_G = T6_G.subs(s)
+```
 
-Since debugging is enabled, you should be able to see diagnostic output on various terminals that have popped up.
+To account for the difference between gripper frame in DH reference frame and urdf reference frame, a correction rotation matrix is defined to align these two reference frames:
+```python
+# Correction rotation matrix for the difference between DH and urdf reference frames for the gripper link
+R_z = Matrix([[     cos(np.pi), -sin(np.pi),             0,   0],
+              [     sin(np.pi),  cos(np.pi),             0,   0],
+              [              0,           0,             1,   0],
+              [              0,           0,             0,   1]])
+ 
+R_y = Matrix([[  cos(-np.pi/2),           0, sin(-np.pi/2),   0],
+              [              0,           1,             0,   0],
+              [ -sin(-np.pi/2),           0, cos(-np.pi/2),   0],
+              [              0,           0,       0,         1]])
+R_corr = R_z * R_y
+```
 
-The demo ends when the robot arm reaches at the top of the drop location. 
+Now, we can derive the total transformation from the base link to gripper link by multiplying all the calculated matrices:
+```python
+# Homogeneous transformation from base link to gripper frame 
+T0_G = simplify(T0_1 * T1_2 * T2_3 * T3_4 * T4_5 * T5_6 * T6_G * R_corr)
+```
 
-There is no loopback implemented yet, so you need to close all the terminal windows in order to restart.
+To verify the forward kinematic calculations, the symbolic joint angles are substituted by the first test case and the results are printed:
+```python
+# first test case
+q1_v = -0.65
+q2_v = 0.45
+q3_v = -0.36
+q4_v = 0.95
+q5_v = 0.79
+q6_v = 0.49
 
-In case the demo fails, close all three terminal windows and rerun the script.
+# substitute symbolic variables by test case values
+T0_G_val = T0_G.evalf(subs={q1: q1_v, q2: q2_v, q3: q3_v, q4: q4_v, q5: q5_v, q6: q6_v})
+T0_G_val = np.array(T0_G_val.tolist(), np.float)
+print("Transformation Matrix from base to end effector= ")
+print(T0_G_val)
+print()
+print("Translation = ", T0_G_val[:3,3])
+print("roll = ", np.arctan2(T0_G_val[2,1], T0_G_val[2,2])) #roll
+print("pitch = ", np.arctan2(-T0_G_val[2,0], np.sqrt(T0_G_val[0,0]**2 + T0_G_val[1,0]**2))) #pitch
+print("yaw = ",np.arctan2(T0_G_val[1,0], T0_G_val[0,0])) #yaw
+```
+Results:
+```
+Transformation Matrix from base to end effector= 
+[[ 0.87817143  0.47774295  0.02401277  2.16298055]
+ [ 0.05822874 -0.05693817 -0.99667821 -1.42438431]
+ [-0.47478875  0.87665256 -0.07781984  1.54309862]
+ [ 0.          0.          0.          1.        ]]
+   
+Translation =  [ 2.16298055 -1.42438431  1.54309862]
+roll =  1.6593335679240577
+pitch =  0.49472398572584053
+yaw =  0.0662098822676542
+```
+We can verify that the results match the output from ROS. To simplify running different test cases, `test_joint_state_publisher.py` script is added to the project as a substitute for RViz joint state GUI.
+```
+# the first two elements are dummy values gripper left and right finger commands (not needed here)
+$ python test_joint_state_publisher.py [0,0,-0.65,0.45,-0.36,0.95,0.79,0.49]
+
+# In another terminal:
+$ rosrun tf tf_echo base_link gripper_link
+At time 1530840255.785
+- Translation: [2.163, -1.424, 1.543]
+- Rotation: in Quaternion [0.709, 0.189, -0.159, 0.660]
+            in RPY (radian) [1.659, 0.495, 0.066]
+            in RPY (degree) [95.073, 28.346, 3.794]
+```
+
+#### Inverse Kinematics
+[ik]: ./misc/ik.png
+![dh][ik]
+
+To avoid unnecessary transformations and improve efficiency, **all the calculations are done in urdf reference frames**. Also, quaternions are used whenever possible (instead of Euler angles) for the same reasons and more accurate numerical evaluations.
+
+To calculate the first three joint angles, the coordinates for link2 and link3 origins are projected to a plane passing through link2 and perpendicular to the horizontal plane (x'y') according to above diagram.
+
+First, the coordinates of wrist center (WC) should be calculated. This can be done using the following equation:
+
+<img src="https://latex.codecogs.com/gif.latex?\large \phantom{ }^B r_{WC/B_o} = \phantom{ }^B r_{G_o/B_o} - d_G . \phantom{ }^G_B R[:,3]"/> 
+
+That is, we should move back from the gripper location in the direction of third column of the rotation matrix from the base to gripper frame and with the length of d<sub>G</sub>. d<sub>G</sub> is distance of wrist center to the end-effector which can be found in the urdf file (second table in the previous section). We can rewrite the above equation in a more readable form of:
+
+<img src="https://latex.codecogs.com/gif.latex?\large  wc_x = P_x - d_G . n_x"/> 
+<img src="https://latex.codecogs.com/gif.latex?\large  wc_y = P_y - d_G . n_y"/> 
+<img src="https://latex.codecogs.com/gif.latex?\large  wc_z = P_z - d_G . n_z"/> 
+
+where wc<sub>[x/y/z]</sub> are the coordinates of wrist center, P<sub>[x/y/z]</sub> are the coordinates of the gripper position (input to the IK problem) and n<sub>[x/y/z]</sub> are the elements of rotation matrix in the third column. Rotation matrix can be found by converting gripper pos quaternions (another input to the IK problem) to the matrix format.
+
+Using WC coordinates, θ<sub>1</sub> can be calculated as
+
+<img src="https://latex.codecogs.com/gif.latex?\large \theta_1 = \arctan2(wc_y, wc_x)"/> 
+
+From the above diagram, θ<sub>2</sub> and θ<sub>3</sub> can be found by the following equations:
+
+<img src="https://latex.codecogs.com/gif.latex?\large \theta_2 = \pi - a - \gamma - \pi/2"/> 
+<img src="https://latex.codecogs.com/gif.latex?\large \theta_3 = \pi - b - \omega - \pi/2"/> 
+
+γ is calculated using the projected coordinates of the wrist center and link2's origin:
+
+<img src="https://latex.codecogs.com/gif.latex?\large \gamma = \arctan2(wc_{y'} - O_2_{y'}, wc_{x'} - O_2_{x'})"/> 
+
+ω is a fixed angle and can be calculated using the robot's urdf data and following equation:
+
+<img src="https://latex.codecogs.com/gif.latex?\large \omega = \arctan2(-a_3, d_4)"/> 
+
+angles a and b are calculated using law of cosines:
+
+<img src="https://latex.codecogs.com/gif.latex?\large a = \arccos \frac{A^2-B^2-C^2}{2B.C}"/> 
+<img src="https://latex.codecogs.com/gif.latex?\large b = \arccos \frac{B^2-A^2-C^2}{2A.C}"/> 
+
+Using  θ<sub>1</sub>, θ<sub>2</sub> and θ<sub>3</sub>, we can find the rotation matrix from base to link3 and calculate the rotation matrix from link3 to the gripper using following equation:
+
+<img src="https://latex.codecogs.com/gif.latex?\large \phantom{ }^G_3 R = \text{inv}\{{\phantom{ }^3_B R}\} \phantom{ }^G_B R = \phantom{ }^3_B R^T \phantom{ }^G_B R "/> 
+
+Finally, θ<sub>4</sub>, θ<sub>5</sub> and  θ<sub>6</sub> are calculated as:
+
+<img src="https://latex.codecogs.com/gif.latex?\large \theta_4 = \arctan2(\phantom{ }^G_3 R[2, 1], -\phantom{ }^G_3 R[3, 1])"/>
+<img src="https://latex.codecogs.com/gif.latex?\large \theta_5 = \arctan2(\sqrt{\phantom{ }^G_3 R[2, 1]^ 2 + \phantom{ }^G_3 R[3, 1] ^ 2}, \phantom{ }^G_3 R[1, 1])"/>
+<img src="https://latex.codecogs.com/gif.latex?\large \theta_6 = \arctan2(\phantom{ }^G_3 R[1, 2], \phantom{ }^G_3 R[1, 3])"/>
+
+
+### Project Implementation
+
+The IK equations described in the previous section are all implemented in `IK_server.py` and `IK_debug.py`. Since, the forward kinematic is not needed in `IK_server.py`, those codes are not included there. This makes the simulation run faster. Instead, FK codes are included in `kinematics.ipynb` notebook.
+
+A preview of the simulation is included at the top of this page. Following picture is the screenshot of bin after task is completed for 9 different object locations
+
+[comp]: ./output/completed.png
+![comp]
+
 
